@@ -1,16 +1,16 @@
 import sys
 import numpy as np
-from tqdm import tqdm
 
 
 def txt_to_np(text_file_path):
     with open(text_file_path, 'r') as f:
         txt_data = f.readlines()
         txt_data = [x.strip() for x in txt_data]
-    num_data = []
-    for line in txt_data:
-        num_data.append([float(y) for y in line.split()])
-    np_data = np.array(num_data)
+    n_samples = len(txt_data)
+    samples_size = len([float(y) for y in txt_data[0].split()])
+    np_data = np.zeros((n_samples, samples_size))
+    for i, line in enumerate(txt_data):
+        np_data[i, :] = np.array([float(y) for y in line.split()])
     return np_data
 
 
@@ -21,23 +21,10 @@ def read_data(train_x_path, train_y_path, test_x_path):
     return train_x, train_y, test_x
 
 
-def read_data_fast(train_x_path, train_y_path, test_x_path):
-    # TODO: delete this function before submission
-    # TODO: validate that everything works with normal functions
-    train_x = np.load('new_format/' + train_x_path + '.npy')
-    train_y = np.load('new_format/' + train_y_path + '.npy')
-    test_x = np.load('new_format/' + test_x_path + '.npy')
-    return train_x, train_y, test_x
-
-
-def normalize_data(data, mean=None, std=None):
-    if not mean:
-        mean = np.mean(data)
-    if not std:
-        std = np.sqrt(np.var(data))
-    data -= mean
-    data /= std
-    return data, mean, std
+def write_res():
+    with open(test_y, 'w') as out:
+        for i in range(test_x.shape[0]):
+            out.write('{}\n'.format(results[i]))
 
 
 def initialize_weights(input_size, n_hidden, n_classes, w_var, reg=0):
@@ -48,9 +35,8 @@ def initialize_weights(input_size, n_hidden, n_classes, w_var, reg=0):
     return W1, b1, W2, b2
 
 
-def train_nn(train_x, train_y, n_hidden=10, n_classes=10, T=1, lr=0.5, w_var=0.1, reg=0):
+def train_nn(train_x, train_y, n_hidden=200, n_classes=10, T=30, lr=0.04, w_var=0.9, reg=0):
     # initialize weights
-    print(f"w_var is: {w_var}. lr is: {lr}")
     n_train = train_x.shape[0]
     input_size = train_x.shape[1]
     W1, b1, W2, b2 = initialize_weights(input_size, n_hidden, n_classes, w_var)
@@ -58,7 +44,7 @@ def train_nn(train_x, train_y, n_hidden=10, n_classes=10, T=1, lr=0.5, w_var=0.1
     # train model
     for epoch in range(T):
         loss = 0
-        for i in tqdm(range(n_train)):
+        for i in range(n_train):
             # forward pass
             h = np.dot(W1.T, train_x[i]) + b1
             h_relu = np.maximum(h, 0)
@@ -90,7 +76,6 @@ def train_nn(train_x, train_y, n_hidden=10, n_classes=10, T=1, lr=0.5, w_var=0.1
 
         loss /= n_train
         loss += reg * np.sum(W2 * W2) + reg * np.sum(W1 * W1)
-        print(f'epoch {epoch}: current loss is:{loss}')
     return W1, b1, W2, b2
 
 
@@ -98,21 +83,32 @@ def test_nn(test_x, model):
     n_test = test_x.shape[0]
     results = []
     W1, b1, W2, b2 = model
-    for i in tqdm(range(n_test)):
-            # forward pass
+    for i in range(n_test):
             h = np.dot(W1.T, test_x[i]) + b1
             h_relu = np.maximum(h, 0)
             scores = np.dot(W2.T, h_relu) + b2
-            results[i].append(n.argmax(scores))
+            results.append(np.argmax(scores))
     return results
 
 
 if __name__ == "__main__":
-    train_x_path, train_y_path, test_x_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+    train_x_path, train_y_path, test_x_path, test_y = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
     # data manipulations
-    train_x, train_y, test_x = read_data_fast(train_x_path, train_y_path, test_x_path)
-    train_x, mean, std = normalize_data(train_x)
-    test_x, _, _ = normalize_data(test_x, mean=mean, std=std)
+    train_x, train_y, test_x = read_data(train_x_path, train_y_path, test_x_path)
+
+    # normalize train_x
+    for c in range(train_x.shape[1]):
+        train_x_avg = np.mean(train_x[:, c])
+        std = np.std(train_x[:, c])
+        if std > 0:
+            train_x[:, c] = (train_x[:, c] - train_x_avg) / std
+
+    # normalize test_x
+    for c in range(test_x.shape[1]):
+        test_x_avg = np.mean(test_x[:, c])
+        std = np.std(test_x[:, c])
+        if std > 0:
+            test_x[:, c] = (test_x[:, c] - test_x_avg) / std
 
     # train the model
     lr_list = [0.0001]
@@ -121,5 +117,5 @@ if __name__ == "__main__":
         for w_var in w_var_list:
             model = train_nn(train_x, train_y, lr=lr, w_var=w_var)
             results = test_nn(test_x, model)
-    # test the model
-    # TODO: test on test data
+
+    write_res()
